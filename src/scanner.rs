@@ -1,117 +1,98 @@
-use std::cell::Cell;
+use std::{cell::Cell, ops::Add};
 
 use crate::{
     lox_error::{LoxError, Result},
     token::{Token, TokenType},
 };
 
-/*
-    This section feels really gross. None of it is idiomatic Rust in the sense of
-    opting for semi-mutable global state across the struct. There is a ton of overhead
-    managing things like the start, current, and line values in addition to the poor
-    handling of retrieving some optional values. For right now, it does in fact work
-    for the purposes of building a "working" scanner.
-*/
-
 pub struct Scanner {
     source: String,
-    start: Cell<usize>,
-    current: Cell<usize>,
-    line: Cell<isize>,
 }
 
 impl Scanner {
     pub fn new(source: String) -> Scanner {
-        Scanner {
-            source,
-            start: Cell::new(0),
-            current: Cell::new(0),
-            line: Cell::new(1),
-        }
+        Scanner { source }
     }
 
     pub fn scan_tokens(&self) -> Vec<Token> {
-        let mut tokens: Vec<Token> = vec![];
-        while !self.is_at_end() {
-            self.start.set(self.current.get());
-            tokens.push(self.scan_token().unwrap());
+        let mut split_source = self.source.as_bytes().iter().peekable();
+        let mut result: Vec<Token> = vec![];
+        let mut line = 1;
+        while let Some(current) = split_source.next() {
+            match current {
+                b'(' => result.push(Token::new(TokenType::LEFT_PAREN, "(", "(", line)),
+                b')' => result.push(Token::new(TokenType::RIGHT_PAREN, ")", ")", line)),
+                b'{' => result.push(Token::new(TokenType::LEFT_BRACE, "{", "{", line)),
+                b'}' => result.push(Token::new(TokenType::RIGHT_BRACE, "}", "}", line)),
+                b',' => result.push(Token::new(TokenType::COMMA, ",", ",", line)),
+                b'.' => result.push(Token::new(TokenType::DOT, ".", ".", line)),
+                b'-' => result.push(Token::new(TokenType::MINUS, "-", "-", line)),
+                b'+' => result.push(Token::new(TokenType::PLUS, "+", "+", line)),
+                b';' => result.push(Token::new(TokenType::SEMICOLIN, ";", ";", line)),
+                b'*' => result.push(Token::new(TokenType::STAR, "*", "*", line)),
+                b'!' => {
+                    if let Some(peek) = split_source.peek() {
+                        if **peek == b'=' {
+                            result.push(Token::new(TokenType::BANG_EQUAL, "!=", "!=", line));
+                            split_source.next();
+                        } else {
+                            result.push(Token::new(TokenType::BANG, "!", "!", line))
+                        }
+                    }
+                }
+                b'=' => {
+                    if let Some(peek) = split_source.peek() {
+                        if **peek == b'=' {
+                            result.push(Token::new(TokenType::EQUAL_EQUAL, "==", "==", line));
+                            split_source.next();
+                        } else {
+                            result.push(Token::new(TokenType::EQUAL, "=", "=", line))
+                        }
+                    }
+                }
+                b'<' => {
+                    if let Some(peek) = split_source.peek() {
+                        if **peek == b'=' {
+                            result.push(Token::new(TokenType::LESS_EQUAL, "<=", "<=", line));
+                            split_source.next();
+                        } else {
+                            result.push(Token::new(TokenType::LESS, "<", "<", line))
+                        }
+                    }
+                }
+                b'>' => {
+                    if let Some(peek) = split_source.peek() {
+                        if **peek == b'=' {
+                            result.push(Token::new(TokenType::GREATER_EQUAL, ">=", ">=", line));
+                            split_source.next();
+                        } else {
+                            result.push(Token::new(TokenType::GREATER, ">", ">", line))
+                        }
+                    }
+                }
+                b'/' => {
+                    if let Some(peek) = split_source.peek() {
+                        if **peek == b'/' {
+                            while let Some(skipped) = split_source.next() {
+                                if *skipped == b'\n' {
+                                    line = line + 1;
+                                    break;
+                                }
+                            }
+                            split_source.next();
+                        }
+                    } else {
+                        result.push(Token::new(TokenType::SLASH, "/", "/", line))
+                    }
+                }
+                b' ' => (),
+                b'\r' => (),
+                b'\n' => {
+                    line = line + 1;
+                }
+                _ => print!("why"),
+            };
         }
-
-        tokens.push(Token::new(
-            TokenType::EOF,
-            String::from(""),
-            String::from(""),
-            self.line.get(),
-        ));
-        tokens
-    }
-
-    fn is_at_end(&self) -> bool {
-        self.current.get() >= self.source.len()
-    }
-
-    fn iterate_current(&self) {
-        self.current.set(self.current.get() + 1);
-    }
-
-    fn advance(&self) -> &str {
-        let current = self.get_current_char();
-        self.iterate_current();
-        current
-    }
-
-    fn make_token(&self, token_type: TokenType) -> Token {
-        if let Some(text) = self.source.get(self.start.get()..self.current.get()) {
-            Token::new(
-                token_type,
-                String::from(text),
-                String::from(text),
-                self.line.get(),
-            )
-        } else {
-            // TODO: This is ugly, fix this
-            panic!()
-        }
-    }
-
-    fn get_current_char(&self) -> &str {
-        if let Some(char) = self.source.get(self.current.get()..self.current.get() + 1) {
-            char
-        } else {
-            // TODO: This is ugly, fix this
-            panic!()
-        }
-    }
-
-    fn is_match(&self, char: &str) -> bool {
-        if !self.is_at_end() && self.get_current_char() == char {
-            self.iterate_current();
-            return true;
-        }
-        false
-    }
-
-    fn scan_token(&self) -> Result<Token> {
-        match self.advance() {
-            "(" => Ok(self.make_token(TokenType::LEFT_PAREN)),
-            ")" => Ok(self.make_token(TokenType::RIGHT_PAREN)),
-            "{" => Ok(self.make_token(TokenType::LEFT_BRACE)),
-            "}" => Ok(self.make_token(TokenType::RIGHT_BRACE)),
-            "," => Ok(self.make_token(TokenType::COMMA)),
-            "." => Ok(self.make_token(TokenType::DOT)),
-            "-" => Ok(self.make_token(TokenType::MINUS)),
-            "+" => Ok(self.make_token(TokenType::PLUS)),
-            ";" => Ok(self.make_token(TokenType::SEMICOLIN)),
-            "*" => Ok(self.make_token(TokenType::STAR)),
-            "!" if self.is_match("=") => Ok(self.make_token(TokenType::BANG_EQUAL)),
-            "!" => Ok(self.make_token(TokenType::BANG)),
-            "=" if self.is_match("=") => Ok(self.make_token(TokenType::EQUAL_EQUAL)),
-            "=" => Ok(self.make_token(TokenType::EQUAL)),
-            "<" if self.is_match("=") => Ok(self.make_token(TokenType::LESS_EQUAL)),
-            "<" => Ok(self.make_token(TokenType::LESS)),
-            ">" if self.is_match("=") => Ok(self.make_token(TokenType::GREATER_EQUAL)),
-            ">" => Ok(self.make_token(TokenType::GREATER)),
-            _ => Err(LoxError),
-        }
+        result
     }
 }

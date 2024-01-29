@@ -55,21 +55,21 @@ impl Display for TokenType {
 }
 
 #[derive(Debug)]
-pub struct Token {
+pub struct Token<'a> {
     token_type: TokenType,
-    lexeme: String,
-    literal: String,
+    lexeme: &'a str,
+    literal: &'a str,
     line: isize,
 }
 
-impl Display for Token {
+impl<'a> Display for Token<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, literal: String, line: isize) -> Token {
+impl<'a> Token<'a> {
+    pub fn new(token_type: TokenType, lexeme: &'a str, literal: &'a str, line: isize) -> Token<'a> {
         Token {
             token_type,
             lexeme,
