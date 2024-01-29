@@ -1,5 +1,3 @@
-use std::{cell::Cell, ops::Add};
-
 use crate::{
     lox_error::{LoxError, Result},
     token::{Lexeme, Token, TokenType},
