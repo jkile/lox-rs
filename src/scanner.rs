@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     lox_error::{LoxError, Result},
     token::{Lexeme, Token, TokenType},
@@ -13,6 +15,24 @@ impl Scanner {
     }
 
     pub fn scan_tokens(&self) -> Vec<Token> {
+        let keywords: HashMap<&str, TokenType> = HashMap::from([
+            ("and", TokenType::AND),
+            ("class", TokenType::CLASS),
+            ("else", TokenType::ELSE),
+            ("false", TokenType::FALSE),
+            ("for", TokenType::FOR),
+            ("fun", TokenType::FUN),
+            ("if", TokenType::IF),
+            ("nil", TokenType::NIL),
+            ("or", TokenType::OR),
+            ("print", TokenType::PRINT),
+            ("return", TokenType::RETURN),
+            ("super", TokenType::SUPER),
+            ("this", TokenType::THIS),
+            ("true", TokenType::TRUE),
+            ("var", TokenType::VAR),
+            ("while", TokenType::WHILE),
+        ]);
         let mut split_source = self.source.as_bytes().iter().peekable();
         let mut result: Vec<Token> = vec![];
         let mut line = 1;
@@ -205,16 +225,15 @@ impl Scanner {
                             break;
                         }
                     }
-                    let finished = String::from_utf8(current_string).expect("test");
+                    let finished = String::from_utf8_lossy(current_string.as_slice());
 
                     result.push(Token::new(
                         TokenType::STRING,
-                        Lexeme::Char(finished.clone()),
-                        finished.clone(),
+                        Lexeme::Char(finished.to_string()),
+                        finished.to_string(),
                         line,
                     ));
                 }
-                // 556.95
                 char if Self::is_digit(char) => {
                     let mut full_num: Vec<u8> = vec![];
                     let mut needs_next = false;
@@ -262,10 +281,54 @@ impl Scanner {
                         line,
                     ));
                 }
+                char if Self::is_alpha(char) => {
+                    let mut identifier_list: Vec<u8> = vec![];
+                    identifier_list.push(*char);
+                    let mut needs_next = false;
+                    loop {
+                        if let Some(peeked) = split_source.peek() {
+                            if Self::is_alpha_numeric(peeked) {
+                                needs_next = true;
+                            } else {
+                                break;
+                            }
+                        }
+                        if needs_next {
+                            if let Some(next) = split_source.next() {
+                                identifier_list.push(*next);
+                                needs_next = false;
+                            }
+                        }
+                    }
+                    let identifier = String::from_utf8_lossy(identifier_list.as_slice());
+                    if let Some(keyword) = keywords.get(identifier.to_string().as_str()) {
+                        result.push(Token::new(
+                            *keyword,
+                            Lexeme::Char(identifier.to_string()),
+                            identifier.to_string(),
+                            line,
+                        ))
+                    } else {
+                        result.push(Token::new(
+                            TokenType::IDENTIFIER,
+                            Lexeme::Char(identifier.to_string()),
+                            identifier.to_string(),
+                            line,
+                        ))
+                    }
+                }
                 _ => print!("why"),
             };
         }
         result
+    }
+
+    fn is_alpha_numeric(char: &u8) -> bool {
+        Self::is_alpha(char) || Self::is_digit(char)
+    }
+
+    fn is_alpha(char: &u8) -> bool {
+        char.is_ascii_alphabetic() || *char == b'_'
     }
 
     fn is_digit(char: &u8) -> bool {
